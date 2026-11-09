@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Pesquisa de Usuários</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+
+  #app { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000; }
+  #app.ativo { display: flex; }
+
+  /* Vídeo vertical 9:16 ajustado a qualquer tela de celular */
+  #palco { position: relative; height: 100%; width: auto; aspect-ratio: 9 / 16; max-width: 100%; background: #000; }
+  @supports (height: 100dvh) { #palco { height: 100dvh; } }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+
+  /* Pop-up futurista */
+  #popup { position: absolute; left: 50%; top: 50%; width: 88%; transform: translate(-50%, -50%) scale(.92); opacity: 0; pointer-events: none; transition: opacity .4s ease, transform .4s ease; }
+  #popup.aberto { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  .painel { background: rgba(255,255,255,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); clip-path: polygon(0 0, 100% 0, 100% 82%, 92% 100%, 0 100%); padding: 6vw 6vw 5vw; box-shadow: 0 0 30px rgba(0,160,255,.35); }
+  #texto { color: #111; font-weight: 700; font-size: clamp(15px, 4.4vw, 22px); line-height: 1.35; margin-bottom: 6vw; }
+  #opcoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3vw; }
+  .opcao { position: relative; border: none; cursor: pointer; padding: 3vw 6vw; font-size: clamp(12px, 3.6vw, 16px); letter-spacing: .12em; text-transform: uppercase; font-weight: 600; background: #d8dde2; color: #6b7480; transition: all .2s; }
+  .opcao.destaque { background: #0b2a4a; color: #fff; }
+  .opcao.destaque::before, .opcao.destaque::after { content: ''; position: absolute; width: 10px; height: 10px; border: 2px solid #0b2a4a; }
+  .opcao.destaque::before { top: -6px; left: -6px; border-right: none; border-bottom: none; }
+  .opcao.destaque::after { bottom: -6px; right: -6px; border-left: none; border-top: none; }
+  .opcao:active { transform: scale(.94); filter: brightness(1.2); }
+
+  /* Estilo lista vertical (perguntas a partir da 2) */
+  #opcoes.lista { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1.5vw; width: 45%; position: relative; padding: 2vw; }
+  #opcoes.lista .opcao { width: 100%; text-align: left; background: transparent; color: #222; padding: 2.2vw 4vw; letter-spacing: .08em; }
+  #opcoes.lista .opcao.destaque { background: #0b2a4a; color: #fff; }
+
+  /* Tela de resultados com círculo futurista girando */
+  #resultados { justify-content: flex-start; overflow-y: auto; padding: 10vw 6vw 14vw; }
+  #resultados .fundo { position: fixed; left: 50%; top: 50%; width: 130vw; height: 130vw; transform: translate(-50%, -50%); opacity: .5; pointer-events: none; z-index: 0; }
+  .anel { fill: none; transform-box: fill-box; transform-origin: center; }
+  .a1 { stroke: #1e90ff; stroke-width: 10; stroke-dasharray: 520 120 300 80; animation: gira 44s linear infinite; }
+  .a2 { stroke: #00d0ff; stroke-width: 5; stroke-dasharray: 360 90 180 60; animation: gira 30s linear infinite reverse; }
+  .a3 { stroke: #4fe3ff; stroke-width: 12; stroke-dasharray: 240 80 120 50; animation: gira 22s linear infinite; }
+  .a4 { stroke: #1e90ff; stroke-width: 4; stroke-dasharray: 140 60 80 40; animation: gira 16s linear infinite reverse; }
+  .nucleo { transform-box: fill-box; transform-origin: center; animation: pulsa 3s ease-in-out infinite; }
+  @keyframes gira { to { transform: rotate(360deg); } }
+  @keyframes pulsa { 0%, 100% { opacity: .55; transform: scale(.9); } 50% { opacity: 1; transform: scale(1.2); } }
+  .conteudo { position: relative; z-index: 1; width: 100%; max-width: 480px; margin: 0 auto; text-align: left; }
+  .conteudo h1, .conteudo #resumo { text-align: center; }
+  .item { margin-bottom: 6vw; }
+  .item h3 { font-size: clamp(13px, 3.8vw, 17px); margin-bottom: 2vw; color: #bfe6ff; }
+  .linha { display: flex; align-items: center; gap: 2vw; margin-bottom: 1.5vw; font-size: clamp(11px, 3.2vw, 14px); }
+  .linha .nome { width: 36%; }
+  .linha .barra { flex: 1; height: 10px; background: rgba(63,180,255,.15); }
+  .linha .barra i { display: block; height: 100%; background: linear-gradient(90deg, #1e90ff, #4fe3ff); box-shadow: 0 0 8px #3fb4ff; transition: width .8s ease; }
+  .linha .pct { width: 13%; text-align: right; }
+
+  /* Tela de início, agradecimento e aviso */
+  .tela { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8vw; background: radial-gradient(circle at 50% 30%, #0b2a4a, #02060c); color: #e8f4ff; z-index: 10; }
+  .tela.ativo { display: flex; }
+  .tela h1 { font-size: clamp(22px, 7vw, 34px); margin-bottom: 4vw; letter-spacing: .08em; }
+  .tela p { font-size: clamp(14px, 4.2vw, 20px); line-height: 1.4; margin-bottom: 8vw; opacity: .9; }
+  .tela button { padding: 3.5vw 9vw; font-size: clamp(14px, 4vw, 18px); letter-spacing: .15em; text-transform: uppercase; border: 2px solid #3fb4ff; background: transparent; color: #e8f4ff; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- Aviso para quem abrir fora do celular -->
+<div id="aviso" class="tela">
+  <h1>SOMENTE CELULAR</h1>
+  <p>Esta pesquisa só pode ser respondida pelo celular. Abra este link no seu smartphone.</p>
+</div>
+
+<!-- Tela inicial (necessária para o celular liberar o som do vídeo) -->
+<div id="inicio" class="tela">
+  <button id="btnIniciar">Não clique neste botão</button>
+</div>
+
+<!-- Vídeo + pop-up -->
+<div id="app">
+  <div id="palco">
+    <video id="video" playsinline webkit-playsinline preload="auto"></video>
+    <div id="popup">
+      <div class="painel">
+        <div id="texto"></div>
+        <div id="opcoes"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Resultados (círculo girando + música de fundo) -->
+<div id="resultados" class="tela">
+  <svg class="fundo" viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <radialGradient id="brilho">
+        <stop offset="0%" stop-color="#ffffff"/>
+        <stop offset="35%" stop-color="#4fe3ff" stop-opacity=".8"/>
+        <stop offset="100%" stop-color="#1e90ff" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <circle class="nucleo" cx="200" cy="200" r="60" fill="url(#brilho)"/>
+    <circle class="anel a1" cx="200" cy="200" r="190"/>
+    <circle class="anel a2" cx="200" cy="200" r="160"/>
+    <circle class="anel a3" cx="200" cy="200" r="125"/>
+    <circle class="anel a4" cx="200" cy="200" r="90"/>
+  </svg>
+  <div class="conteudo">
+    <h1>OBRIGADO!</h1>
+    <p id="resumo"></p>
+    <div id="lista"></div>
+  </div>
+  <audio id="musica" src="m1.mp3" loop preload="auto"></audio>
+  <audio id="fala" src="m2.mp3" preload="auto"></audio>
+</div>
+
+<!-- Agradecimento -->
+<div id="fim" class="tela">
+  <h1>OBRIGADO!</h1>
+  <p>Sua participação foi muito importante para a pesquisa.</p>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-app.js";
+import { getFirestore, collection, addDoc, getDocs, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBz-uT35Oa26YbvQyYm9DhfN353LioPpkU",
+  authDomain: "pesquisa-9651c.firebaseapp.com",
+  projectId: "pesquisa-9651c",
+  storageBucket: "pesquisa-9651c.firebasestorage.app",
+  messagingSenderId: "1093940651812",
+  appId: "1:1093940651812:web:685145cd2d3cd9879875b1",
+  measurementId: "G-CRKPBWYSMD"
+};
+const db = getFirestore(initializeApp(firebaseConfig));
+
+/* ================== CONFIGURAÇÃO ==================
+   Cada etapa tem: video, texto do pop-up e opções.
+   Opção com proximo: indica para qual etapa vai (número da etapa).
+   Opção com fim: true encerra a pesquisa.
+   Para adicionar vídeos novos (v3, v4...), copie um bloco e ajuste.
+==================================================== */
+const etapas = [
+  {
+    video: 'v1.mp4',
+    texto: 'Guilherme, um homem que me criou, está realizando uma pesquisa de usuários. Gostaria de participar?',
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 1 },
+      { rotulo: 'Não', fim: true }
+    ]
+  },
+  {
+    video: 'v2.mp4',
+    texto: 'Você consideraria um relacionamento com um androide que parecesse humano?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 2 },
+      { rotulo: 'Não', proximo: 2 },
+      { rotulo: 'Não sei', proximo: 2 }
+    ]
+  },
+  {
+    video: 'v3.mp4',
+    texto: 'Acha que a tecnologia pode se tornar uma ameaça à humanidade?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 3 },
+      { rotulo: 'Não', proximo: 3 },
+      { rotulo: 'Não sei', proximo: 3 }
+    ]
+  },
+  {
+    video: 'v4.mp4',
+    texto: 'Se precisasse viver em uma ilha deserta e pudesse levar apenas um objeto, qual seria?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Um livro', destaque: true, proximo: 4 },
+      { rotulo: 'Um telefone celular', proximo: 4 },
+      { rotulo: 'Papel e caneta', proximo: 4 },
+      { rotulo: 'Um console', proximo: 4 },
+      { rotulo: 'Um instrumento', proximo: 4 }
+    ]
+  },
+  {
+    video: 'v5.mp4',
+    texto: 'Você se considera dependente de tecnologia?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 5 },
+      { rotulo: 'Não', proximo: 5 },
+      { rotulo: 'Não sei', proximo: 5 }
+    ]
+  },
+  {
+    video: 'v6.mp4',
+    texto: 'Qual tecnologia você mais espera ver?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Androides', destaque: true, proximo: 6 },
+      { rotulo: 'Carros voadores', proximo: 6 },
+      { rotulo: 'Turismo espacial', proximo: 6 },
+      { rotulo: 'Dispositivos conectados a cérebros', proximo: 6 }
+    ]
+  },
+  {
+    video: 'v7.mp4',
+    texto: 'Você acredita em Deus?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 7 },
+      { rotulo: 'Não', proximo: 7 },
+      { rotulo: 'Não sei', proximo: 7 }
+    ]
+  },
+  {
+    video: 'v8.mp4',
+    texto: 'Você deixaria um androide tomar conta dos seus filhos?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 8 },
+      { rotulo: 'Não', proximo: 8 },
+      { rotulo: 'Não sei', proximo: 8 }
+    ]
+  },
+  {
+    video: 'v9.mp4',
+    texto: 'Quanto tempo por dia você passa em frente a um aparelho eletrônico?',
+    lista: true,
+    opcoes: [
+      { rotulo: '1 hora', destaque: true, proximo: 9 },
+      { rotulo: '2 horas', proximo: 9 },
+      { rotulo: '4 horas', proximo: 9 },
+      { rotulo: 'Mais', proximo: 9 },
+      { rotulo: 'Não sei', proximo: 9 }
+    ]
+  },
+  {
+    video: 'v10.mp4',
+    texto: 'Se precisasse de cirurgia de emergência, concordaria em ser operado por uma máquina?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 10 },
+      { rotulo: 'Não', proximo: 10 },
+      { rotulo: 'Não sei', proximo: 10 }
+    ]
+  },
+  {
+    video: 'v11.mp4',
+    texto: 'Acredita que um dia as máquinas desenvolverão consciência?',
+    lista: true,
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, fim: true },
+      { rotulo: 'Não', fim: true },
+      { rotulo: 'Não sei', fim: true }
+    ]
+  }
+];
+
+const respostas = [];
+let atual = 0;
+
+const video = document.getElementById('video');
+const popup = document.getElementById('popup');
+const textoEl = document.getElementById('texto');
+const opcoesEl = document.getElementById('opcoes');
+
+// Só celular
+const ehCelular = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && window.matchMedia('(pointer: coarse)').matches;
+
+function mostrar(id) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativo'));
+  document.getElementById('app').classList.remove('ativo');
+  if (id === 'app') document.getElementById('app').classList.add('ativo');
+  else document.getElementById(id).classList.add('ativo');
+}
+
+function tocarEtapa(i) {
+  atual = i;
+  popup.classList.remove('aberto');
+  video.src = etapas[i].video;
+  video.currentTime = 0;
+  video.play().catch(() => {});
+}
+
+video.addEventListener('ended', () => {
+  const e = etapas[atual];
+  textoEl.textContent = e.texto;
+  opcoesEl.innerHTML = '';
+  opcoesEl.classList.toggle('lista', !!e.lista);
+  e.opcoes.forEach(op => {
+    const b = document.createElement('button');
+    b.className = 'opcao' + (op.destaque ? ' destaque' : '');
+    b.textContent = op.rotulo;
+    b.onclick = () => {
+      respostas.push({ etapa: atual + 1, resposta: op.rotulo });
+      popup.classList.remove('aberto');
+      if (op.fim || op.proximo === undefined) { if (atual === 0) mostrar('fim'); else finalizar(); }
+      else { setTimeout(() => tocarEtapa(op.proximo), 350); }
+    };
+    opcoesEl.appendChild(b);
+  });
+  popup.classList.add('aberto');
+});
+
+// Salva as respostas, soma tudo e mostra o total com porcentagens
+async function finalizar() {
+  mostrar('resultados');
+  const resumo = document.getElementById('resumo');
+  resumo.textContent = 'Carregando resultados...';
+  const musica = document.getElementById('musica');
+  const fala = document.getElementById('fala');
+  musica.volume = 0.25;
+  fala.volume = 1.0;
+  musica.play().catch(() => {});
+  fala.play().catch(() => {});
+  try {
+    const mapa = {};
+    respostas.forEach(r => { if (r.etapa > 1) mapa['p' + r.etapa] = r.resposta; });
+    await addDoc(collection(db, 'respostas'), { ...mapa, criadoEm: serverTimestamp() });
+    const snap = await getDocs(collection(db, 'respostas'));
+    mostrarResultados(snap.docs.map(d => d.data()));
+  } catch (erro) {
+    console.error(erro);
+    resumo.textContent = 'Obrigado por participar! Não foi possível carregar os resultados agora.';
+  }
+}
+
+function mostrarResultados(lista) {
+  const total = lista.length;
+  document.getElementById('resumo').textContent = 'Total de participantes: ' + total;
+  const caixa = document.getElementById('lista');
+  caixa.innerHTML = '';
+  etapas.forEach((e, i) => {
+    if (i === 0) return;
+    const chave = 'p' + (i + 1);
+    const item = document.createElement('div');
+    item.className = 'item';
+    const titulo = document.createElement('h3');
+    titulo.textContent = e.texto;
+    item.appendChild(titulo);
+    e.opcoes.forEach(op => {
+      const qtd = lista.filter(x => x[chave] === op.rotulo).length;
+      const pct = total ? Math.round(qtd * 100 / total) : 0;
+      const linha = document.createElement('div');
+      linha.className = 'linha';
+      const nome = document.createElement('span');
+      nome.className = 'nome';
+      nome.textContent = op.rotulo;
+      const barra = document.createElement('span');
+      barra.className = 'barra';
+      const preench = document.createElement('i');
+      preench.style.width = '0%';
+      barra.appendChild(preench);
+      const valor = document.createElement('span');
+      valor.className = 'pct';
+      valor.textContent = pct + '%';
+      linha.appendChild(nome);
+      linha.appendChild(barra);
+      linha.appendChild(valor);
+      item.appendChild(linha);
+      setTimeout(() => { preench.style.width = pct + '%'; }, 100);
+    });
+    caixa.appendChild(item);
+  });
+}
+
+document.getElementById('btnIniciar').onclick = () => {
+  mostrar('app');
+  tocarEtapa(0);
+};
+
+if (!ehCelular) mostrar('aviso');
+else mostrar('inicio');
+</script>
+</body>
+</html>
