@@ -29,6 +29,11 @@
   .opcao.destaque::after { bottom: -6px; right: -6px; border-left: none; border-top: none; }
   .opcao:active { transform: scale(.94); filter: brightness(1.2); }
 
+  /* Estilo lista vertical (perguntas a partir da 2) */
+  #opcoes.lista { flex-direction: column; flex-wrap: nowrap; align-items: flex-start; justify-content: flex-start; gap: 1.5vw; width: 45%; position: relative; padding: 2vw; }
+  #opcoes.lista .opcao { width: 100%; text-align: left; background: transparent; color: #222; padding: 2.2vw 4vw; letter-spacing: .08em; }
+  #opcoes.lista .opcao.destaque { background: #0b2a4a; color: #fff; }
+
   /* Tela de início, agradecimento e aviso */
   .tela { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8vw; background: radial-gradient(circle at 50% 30%, #0b2a4a, #02060c); color: #e8f4ff; z-index: 10; }
   .tela.ativo { display: flex; }
@@ -87,10 +92,12 @@ const etapas = [
   },
   {
     video: 'v2.mp4',
-    texto: 'Escreva aqui a pergunta do vídeo 2',
+    texto: 'Você consideraria um relacionamento com um androide que parecesse humano?',
+    lista: true,
     opcoes: [
-      { rotulo: 'Opção A', destaque: true, fim: true },
-      { rotulo: 'Opção B', fim: true }
+      { rotulo: 'Sim', destaque: true, fim: true },
+      { rotulo: 'Não', fim: true },
+      { rotulo: 'Não sei', fim: true }
     ]
   }
 ];
@@ -125,6 +132,7 @@ video.addEventListener('ended', () => {
   const e = etapas[atual];
   textoEl.textContent = e.texto;
   opcoesEl.innerHTML = '';
+  opcoesEl.classList.toggle('lista', !!e.lista);
   e.opcoes.forEach(op => {
     const b = document.createElement('button');
     b.className = 'opcao' + (op.destaque ? ' destaque' : '');
