@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Pesquisa de Usuários</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; font-family: 'Segoe UI', Arial, sans-serif; }
+
+  #app { position: fixed; inset: 0; display: none; align-items: center; justify-content: center; background: #000; }
+  #app.ativo { display: flex; }
+
+  /* Vídeo vertical 9:16 ajustado a qualquer tela de celular */
+  #palco { position: relative; height: 100%; width: auto; aspect-ratio: 9 / 16; max-width: 100%; background: #000; }
+  @supports (height: 100dvh) { #palco { height: 100dvh; } }
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; background: #000; }
+
+  /* Pop-up futurista */
+  #popup { position: absolute; left: 50%; top: 50%; width: 88%; transform: translate(-50%, -50%) scale(.92); opacity: 0; pointer-events: none; transition: opacity .4s ease, transform .4s ease; }
+  #popup.aberto { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  .painel { background: rgba(255,255,255,.88); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); clip-path: polygon(0 0, 100% 0, 100% 82%, 92% 100%, 0 100%); padding: 6vw 6vw 5vw; box-shadow: 0 0 30px rgba(0,160,255,.35); }
+  #texto { color: #111; font-weight: 700; font-size: clamp(15px, 4.4vw, 22px); line-height: 1.35; margin-bottom: 6vw; }
+  #opcoes { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 3vw; }
+  .opcao { position: relative; border: none; cursor: pointer; padding: 3vw 6vw; font-size: clamp(12px, 3.6vw, 16px); letter-spacing: .12em; text-transform: uppercase; font-weight: 600; background: #d8dde2; color: #6b7480; transition: all .2s; }
+  .opcao.destaque { background: #0b2a4a; color: #fff; }
+  .opcao.destaque::before, .opcao.destaque::after { content: ''; position: absolute; width: 10px; height: 10px; border: 2px solid #0b2a4a; }
+  .opcao.destaque::before { top: -6px; left: -6px; border-right: none; border-bottom: none; }
+  .opcao.destaque::after { bottom: -6px; right: -6px; border-left: none; border-top: none; }
+  .opcao:active { transform: scale(.94); filter: brightness(1.2); }
+
+  /* Tela de início, agradecimento e aviso */
+  .tela { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 8vw; background: radial-gradient(circle at 50% 30%, #0b2a4a, #02060c); color: #e8f4ff; z-index: 10; }
+  .tela.ativo { display: flex; }
+  .tela h1 { font-size: clamp(22px, 7vw, 34px); margin-bottom: 4vw; letter-spacing: .08em; }
+  .tela p { font-size: clamp(14px, 4.2vw, 20px); line-height: 1.4; margin-bottom: 8vw; opacity: .9; }
+  .tela button { padding: 3.5vw 9vw; font-size: clamp(14px, 4vw, 18px); letter-spacing: .15em; text-transform: uppercase; border: 2px solid #3fb4ff; background: transparent; color: #e8f4ff; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<!-- Aviso para quem abrir fora do celular -->
+<div id="aviso" class="tela">
+  <h1>SOMENTE CELULAR</h1>
+  <p>Esta pesquisa só pode ser respondida pelo celular. Abra este link no seu smartphone.</p>
+</div>
+
+<!-- Tela inicial (necessária para o celular liberar o som do vídeo) -->
+<div id="inicio" class="tela">
+  <button id="btnIniciar">Começar o vídeo</button>
+</div>
+
+<!-- Vídeo + pop-up -->
+<div id="app">
+  <div id="palco">
+    <video id="video" playsinline webkit-playsinline preload="auto"></video>
+    <div id="popup">
+      <div class="painel">
+        <div id="texto"></div>
+        <div id="opcoes"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Agradecimento -->
+<div id="fim" class="tela">
+  <h1>OBRIGADO!</h1>
+  <p>Sua participação foi muito importante para a pesquisa.</p>
+</div>
+
+<script>
+/* ================== CONFIGURAÇÃO ==================
+   Cada etapa tem: video, texto do pop-up e opções.
+   Opção com proximo: indica para qual etapa vai (número da etapa).
+   Opção com fim: true encerra a pesquisa.
+   Para adicionar vídeos novos (v3, v4...), copie um bloco e ajuste.
+==================================================== */
+const etapas = [
+  {
+    video: 'v1.mp4',
+    texto: 'Guilherme, um homem que me criou, está realizando uma pesquisa de usuários. Gostaria de participar?',
+    opcoes: [
+      { rotulo: 'Sim', destaque: true, proximo: 1 },
+      { rotulo: 'Não', fim: true }
+    ]
+  },
+  {
+    video: 'v2.mp4',
+    texto: 'Escreva aqui a pergunta do vídeo 2',
+    opcoes: [
+      { rotulo: 'Opção A', destaque: true, fim: true },
+      { rotulo: 'Opção B', fim: true }
+    ]
+  }
+];
+
+const respostas = [];
+let atual = 0;
+
+const video = document.getElementById('video');
+const popup = document.getElementById('popup');
+const textoEl = document.getElementById('texto');
+const opcoesEl = document.getElementById('opcoes');
+
+// Só celular
+const ehCelular = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && window.matchMedia('(pointer: coarse)').matches;
+
+function mostrar(id) {
+  document.querySelectorAll('.tela').forEach(t => t.classList.remove('ativo'));
+  document.getElementById('app').classList.remove('ativo');
+  if (id === 'app') document.getElementById('app').classList.add('ativo');
+  else document.getElementById(id).classList.add('ativo');
+}
+
+function tocarEtapa(i) {
+  atual = i;
+  popup.classList.remove('aberto');
+  video.src = etapas[i].video;
+  video.currentTime = 0;
+  video.play().catch(() => {});
+}
+
+video.addEventListener('ended', () => {
+  const e = etapas[atual];
+  textoEl.textContent = e.texto;
+  opcoesEl.innerHTML = '';
+  e.opcoes.forEach(op => {
+    const b = document.createElement('button');
+    b.className = 'opcao' + (op.destaque ? ' destaque' : '');
+    b.textContent = op.rotulo;
+    b.onclick = () => {
+      respostas.push({ etapa: atual + 1, resposta: op.rotulo });
+      popup.classList.remove('aberto');
+      if (op.fim || op.proximo === undefined) { mostrar('fim'); }
+      else { setTimeout(() => tocarEtapa(op.proximo), 350); }
+    };
+    opcoesEl.appendChild(b);
+  });
+  popup.classList.add('aberto');
+});
+
+document.getElementById('btnIniciar').onclick = () => {
+  mostrar('app');
+  tocarEtapa(0);
+};
+
+if (!ehCelular) mostrar('aviso');
+else mostrar('inicio');
+</script>
+</body>
+</html>
